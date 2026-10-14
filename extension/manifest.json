@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Network+",
+  "name": "Network Tab+",
   "version": "1.0.0",
   "description": "A DevTools network panel you can tidy up: hide noisy requests for good and save the filters you keep reaching for.",
   "devtools_page": "devtools.html",

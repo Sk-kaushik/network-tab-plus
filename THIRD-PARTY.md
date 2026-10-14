@@ -1,6 +1,6 @@
 # Third-party code
 
-Network+ bundles the following libraries inside `extension/lib/`. Both are MIT
+Network Tab+ bundles the following libraries inside `extension/lib/`. Both are MIT
 licensed, which permits commercial use and redistribution with attribution.
 
 ## Tabulator 6.3.1

@@ -1,4 +1,4 @@
-# Network+
+# Network Tab+
 
 A DevTools network panel you can tidy up. Right-click a noisy request and it never comes back; save the filters you keep reaching for.
 
@@ -11,7 +11,7 @@ Works in Brave, Chrome, Edge and any other Chromium browser.
 1. Open `brave://extensions` (or `chrome://extensions`).
 2. Turn on **Developer mode**, top-right.
 3. Click **Load unpacked** and pick the `extension/` folder in this repo.
-4. Open DevTools (⌥⌘I) on any page. There's a new **Network+** tab next to Network.
+4. Open DevTools (⌥⌘I) on any page. There's a new **Network Tab+** tab next to Network.
 
 That's it — it survives browser restarts and updates. Keep this folder where it is; the
 browser loads it from this path every time. If you change the code, hit **Reload** on the
@@ -61,7 +61,7 @@ only permission it asks for.
 ./package.sh
 ```
 
-That produces `network-plus-<version>.zip`. Then:
+That produces `network-tab-plus-<version>.zip`. Then:
 
 1. Register as a Chrome Web Store developer — one-off $5 fee at
    <https://chrome.google.com/webstore/devconsole>.

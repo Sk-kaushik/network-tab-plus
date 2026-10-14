@@ -1,4 +1,4 @@
-// Network+ panel: captures requests from DevTools, filters them, and keeps hide rules.
+// Network Tab+ panel: captures requests from DevTools, filters them, and keeps hide rules.
 
 import { store, ALL_COLUMNS, DEFAULT_COLUMNS, ruleApplies, ruleMatches } from "./store.js";
 import { normalize, esc, formatBytes, formatTime, statusKind, toCurl, getBody, prettyJson } from "./request.js";

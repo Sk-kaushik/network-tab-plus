@@ -4,7 +4,7 @@ set -e
 
 cd "$(dirname "$0")"
 VERSION=$(grep '"version"' extension/manifest.json | head -1 | sed 's/[^0-9.]//g')
-OUT="network-plus-${VERSION}.zip"
+OUT="network-tab-plus-${VERSION}.zip"
 
 rm -f "$OUT"
 cd extension
