@@ -31,6 +31,9 @@ const typeGroupOf = (type) =>
 
 const $ = (id) => document.getElementById(id);
 
+// Identifies a request: two polls of the same endpoint differ by start time.
+const entryKey = (e) => `${e.request.method} ${e.request.url} ${e.startedDateTime}`;
+
 /* ------------------------------------------------------------------ state */
 
 let requests = [];
@@ -44,6 +47,8 @@ let hiddenNow = 0;
 let menuRequest = null;              // request the context menu was opened on
 let tableReady = false;              // Tabulator builds asynchronously; nothing may touch it before this
 const sessionHidden = new Set();     // "this request only" hides, forgotten on clear
+const backfilledCounts = new Map();  // request key -> how many copies came from getHAR
+let captureGeneration = 0;           // bumped on clear, so a late backfill can bail
 
 const filterState = { query: "", methods: [], statuses: [], types: [] };
 let activeViewId = null;
@@ -215,6 +220,7 @@ function render() {
 function startCapture() {
   chrome.devtools.network.onRequestFinished.addListener((entry) => {
     if (paused) return;
+    if (consumeBackfilled(entryKey(entry))) return;
     requests.push(normalize(entry, nextId++));
     if (requests.length > MAX_REQUESTS) requests.shift();
     scheduleRender();
@@ -224,11 +230,60 @@ function startCapture() {
     readSite();
     if (!store.prefs.preserveLog) clearAll();
   });
+
+  backfill();
+}
+
+// DevTools records requests from the moment it opens, but this panel only starts
+// hearing about them once it is first shown. getHAR gives us everything we missed,
+// so the table isn't empty when you open the tab on an already-loaded page.
+function backfill() {
+  const generation = captureGeneration;
+  chrome.devtools.network.getHAR((har) => {
+    // A clear or navigation while getHAR was in flight means these are stale.
+    if (generation !== captureGeneration) return;
+
+    // Requests already captured live cancel out their copy in the HAR. Counted
+    // rather than a Set, because requests fired in one tick share a millisecond
+    // and so share a key.
+    const live = new Map();
+    for (const req of requests) {
+      const key = entryKey(req.entry);
+      live.set(key, (live.get(key) || 0) + 1);
+    }
+
+    const earlier = [];
+    for (const entry of har?.entries || []) {
+      const key = entryKey(entry);
+      const alreadyLive = live.get(key);
+      if (alreadyLive) {
+        live.set(key, alreadyLive - 1);
+        continue;
+      }
+      // May still arrive live if it finished during the getHAR round trip.
+      backfilledCounts.set(key, (backfilledCounts.get(key) || 0) + 1);
+      earlier.push(normalize(entry, nextId++));
+    }
+    if (!earlier.length) return;
+
+    requests = earlier.concat(requests).slice(-MAX_REQUESTS);
+    render();
+  });
+}
+
+// One live arrival cancels one backfilled copy of the same request.
+function consumeBackfilled(key) {
+  const pending = backfilledCounts.get(key);
+  if (!pending) return false;
+  backfilledCounts.set(key, pending - 1);
+  return true;
 }
 
 function clearAll() {
+  captureGeneration++;
   requests = [];
   sessionHidden.clear();
+  backfilledCounts.clear();
   selectedId = null;
   closeDetail();
   render();
