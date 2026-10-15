@@ -70,6 +70,4 @@ date at the top.
 
 ## Contact
 
-Questions about this policy: open an issue at
-https://github.com/Sk-kaushik/network-tab-plus or contact the developer through GitHub at
-https://github.com/Sk-kaushik
+Questions about this policy: email skkaushik021@gmail.com
