@@ -117,6 +117,70 @@ export function statusKind(status) {
   return "bd";
 }
 
+/* ------------------------------------------------- query text matching */
+
+// The filter box and the finder share one syntax: plain terms, -exclusions, /regex/.
+export function parseQuery(text) {
+  const include = [], exclude = [], regexes = [];
+  for (const term of String(text ?? "").trim().split(/\s+/).filter(Boolean)) {
+    if (term.startsWith("-") && term.length > 1) {
+      exclude.push(term.slice(1).toLowerCase());
+    } else if (term.length > 2 && term.startsWith("/") && term.endsWith("/")) {
+      try { regexes.push(new RegExp(term.slice(1, -1), "i")); } catch { /* ignore bad regex while typing */ }
+    } else {
+      include.push(term.toLowerCase());
+    }
+  }
+  return { include, exclude, regexes };
+}
+
+export function queryIsEmpty(parsed) {
+  return !parsed.include.length && !parsed.exclude.length && !parsed.regexes.length;
+}
+
+// Split in two because the finder needs them separately: an exclusion has to be
+// judged across everything it searched, while the terms to find are judged per place.
+export function queryExcludes(text, parsed) {
+  const lower = String(text ?? "").toLowerCase();
+  return parsed.exclude.some((term) => lower.includes(term));
+}
+
+export function queryIncludes(text, parsed) {
+  const value = String(text ?? "");
+  const lower = value.toLowerCase();
+  return parsed.include.every((term) => lower.includes(term)) &&
+         parsed.regexes.every((re) => re.test(value));
+}
+
+export function queryMatches(text, parsed) {
+  return !queryExcludes(text, parsed) && queryIncludes(text, parsed);
+}
+
+// Wraps each plain term in <mark>, for the Name column while a find is active.
+// Escaping happens per segment, so the marks survive but the text stays safe.
+export function markTerms(text, terms) {
+  const value = String(text ?? "");
+  if (!terms.length) return esc(value);
+
+  const lower = value.toLowerCase();
+  const ranges = [];
+  for (const term of terms) {
+    for (let at = lower.indexOf(term); at !== -1; at = lower.indexOf(term, at + term.length)) {
+      ranges.push([at, at + term.length]);
+    }
+  }
+  if (!ranges.length) return esc(value);
+  ranges.sort((a, b) => a[0] - b[0]);
+
+  let out = "", cursor = 0;
+  for (const [start, end] of ranges) {
+    if (start < cursor) continue;   // terms that overlap: the first one wins
+    out += esc(value.slice(cursor, start)) + "<mark>" + esc(value.slice(start, end)) + "</mark>";
+    cursor = end;
+  }
+  return out + esc(value.slice(cursor));
+}
+
 // Headers we leave out of the cURL command because curl sets them itself.
 const SKIP_HEADERS = ["content-length", "host", "connection"];
 
