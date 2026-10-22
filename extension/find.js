@@ -158,13 +158,24 @@ function jsonFieldMatches(text, parsed, field) {
   return hasFieldValue(data, parsed, field);
 }
 
-function hasFieldValue(node, parsed, field) {
-  if (Array.isArray(node)) return node.some((item) => hasFieldValue(item, parsed, field));
-  if (!node || typeof node !== "object") return false;
+// Walks with its own stack rather than recursion: JSON.parse will happily
+// accept a body nested deeper than the call stack can follow.
+function hasFieldValue(root, parsed, field) {
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (Array.isArray(node)) {
+      for (const item of node) stack.push(item);
+      continue;
+    }
+    if (!node || typeof node !== "object") continue;
 
-  return Object.entries(node).some(([key, value]) =>
-    (sameKey(key, field) && queryMatches(asText(value), parsed)) || hasFieldValue(value, parsed, field)
-  );
+    for (const [key, value] of Object.entries(node)) {
+      if (sameKey(key, field) && queryMatches(asText(value), parsed)) return true;
+      stack.push(value);
+    }
+  }
+  return false;
 }
 
 function asText(value) {

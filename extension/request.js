@@ -162,23 +162,19 @@ export function markTerms(text, terms) {
   const value = String(text ?? "");
   if (!terms.length) return esc(value);
 
-  const lower = value.toLowerCase();
-  const ranges = [];
-  for (const term of terms) {
-    for (let at = lower.indexOf(term); at !== -1; at = lower.indexOf(term, at + term.length)) {
-      ranges.push([at, at + term.length]);
-    }
-  }
-  if (!ranges.length) return esc(value);
-  ranges.sort((a, b) => a[0] - b[0]);
-
-  let out = "", cursor = 0;
-  for (const [start, end] of ranges) {
-    if (start < cursor) continue;   // terms that overlap: the first one wins
-    out += esc(value.slice(cursor, start)) + "<mark>" + esc(value.slice(start, end)) + "</mark>";
-    cursor = end;
+  // Matched on the original string: lower-casing it first would shift every
+  // position, because some characters get longer in lower case (İ is one).
+  const pattern = new RegExp(terms.map(escapeRegex).join("|"), "gi");
+  let out = "", cursor = 0, hit;
+  while ((hit = pattern.exec(value)) !== null) {
+    out += esc(value.slice(cursor, hit.index)) + "<mark>" + esc(hit[0]) + "</mark>";
+    cursor = hit.index + hit[0].length;
   }
   return out + esc(value.slice(cursor));
+}
+
+function escapeRegex(term) {
+  return term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // Headers we leave out of the cURL command because curl sets them itself.

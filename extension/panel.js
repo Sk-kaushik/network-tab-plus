@@ -55,6 +55,7 @@ let captureGeneration = 0;           // bumped on clear, so a late backfill can 
 const filterState = { query: "", methods: [], statuses: [], types: [] };
 let findTerms = [];                  // plain terms of the running find, for highlighting
 let findVisible = 0;                 // matches actually on screen, for the chip
+let lastColumnKey = "";              // what applyColumnVisibility last acted on
 let draftScopes = ["all"];           // the modal's scope buttons, until Find is pressed
 let activeViewId = null;
 
@@ -138,6 +139,13 @@ function buildTable() {
 function applyColumnVisibility() {
   if (!tableReady) return;
   const finding = findIsOn();
+
+  // Every search batch calls this, but the columns only move when a find starts
+  // or ends, or when you pick different ones.
+  const key = `${finding}|${store.prefs.columns.join(",")}`;
+  if (key === lastColumnKey) return;
+  lastColumnKey = key;
+
   for (const col of ALL_COLUMNS) {
     // "Where it matched" takes the Type column's place while a find is on.
     const show = store.prefs.columns.includes(col.key) && !(finding && col.key === "type");
@@ -146,6 +154,7 @@ function applyColumnVisibility() {
   }
   if (finding) table.showColumn("matchedIn");
   else table.hideColumn("matchedIn");
+  renderColumnLists();
 }
 
 function fieldOf(key) {
@@ -794,11 +803,18 @@ function updateActiveView() {
 /* --------------------------------------------------------- column picker */
 
 function renderColumnLists() {
-  const html = ALL_COLUMNS.map((col) => `
-    <label class="col-row ${col.locked ? "lock" : ""}">
-      <input type="checkbox" data-col="${col.key}" ${store.prefs.columns.includes(col.key) ? "checked" : ""} ${col.locked ? "disabled" : ""} />
-      <span class="nm">${col.label}</span>${col.locked ? '<span class="hint">always on</span>' : ""}
-    </label>`).join("");
+  const finding = findIsOn();
+  const html = ALL_COLUMNS.map((col) => {
+    // Type is standing in for "Where it matched", so it can't be toggled now.
+    const busy = finding && col.key === "type";
+    const fixed = col.locked || busy;
+    const note = col.locked ? "always on" : busy ? "while finding" : "";
+    return `
+    <label class="col-row ${fixed ? "lock" : ""}">
+      <input type="checkbox" data-col="${col.key}" ${store.prefs.columns.includes(col.key) ? "checked" : ""} ${fixed ? "disabled" : ""} />
+      <span class="nm">${col.label}</span>${note ? `<span class="hint">${note}</span>` : ""}
+    </label>`;
+  }).join("");
   $("colList").innerHTML = html;
   $("headColList").innerHTML = html;
 }
@@ -808,7 +824,6 @@ function toggleColumn(key, show) {
   if (show) columns.push(key);
   store.setPref("columns", ALL_COLUMNS.filter((c) => columns.includes(c.key)).map((c) => c.key));
   applyColumnVisibility();
-  renderColumnLists();
 }
 
 /* ----------------------------------------------------------------- misc */
@@ -890,7 +905,6 @@ function wireToolbar() {
   $("colReset").addEventListener("click", () => {
     store.setPref("columns", DEFAULT_COLUMNS.slice());
     applyColumnVisibility();
-    renderColumnLists();
   });
 
   $("hiddenBtn").addEventListener("click", () => toggleDrawer(!$("drawer").classList.contains("open")));
