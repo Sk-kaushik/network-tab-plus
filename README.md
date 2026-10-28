@@ -1,81 +1,120 @@
 # Network Tab+
 
-A DevTools network panel you can tidy up. Right-click a noisy request and it never comes back; save the filters you keep reaching for.
+A DevTools network panel you can tidy up.
+
+The built-in Network tab shows you everything, forever. Heartbeats, analytics beacons, the
+same poll every two seconds — all of it, every time, and you re-type the same filter to get
+rid of it. Network Tab+ lets you hide a request for good, save the filters you keep reaching
+for, and search inside requests instead of only across their URLs.
 
 Works in Brave, Chrome, Edge and any other Chromium browser.
 
 ---
 
-## Install it once (Brave or Chrome)
+## Install
 
-1. Open `brave://extensions` (or `chrome://extensions`).
-2. Turn on **Developer mode**, top-right.
-3. Click **Load unpacked** and pick the `extension/` folder in this repo.
-4. Open DevTools (⌥⌘I) on any page. There's a new **Network Tab+** tab next to Network.
+There is no store listing yet, so load it from source. It takes a minute and survives
+browser restarts.
 
-That's it — it survives browser restarts and updates. Keep this folder where it is; the
-browser loads it from this path every time. If you change the code, hit **Reload** on the
-extension card.
+1. Clone or download this repo.
+2. Open `brave://extensions` (or `chrome://extensions`).
+3. Turn on **Developer mode**, top right.
+4. Click **Load unpacked** and pick the `extension/` folder.
+5. Open DevTools (⌥⌘I / F12) on any page — there's a new **Network Tab+** tab next to Network.
 
-> Like the built-in Network tab, it only records while DevTools is open.
+Keep the folder where it is; the browser loads it from that path every time. After changing
+the code, hit **Reload** on the extension card.
+
+> Like the built-in Network tab, it only records while DevTools is open. It does pick up
+> requests that happened before you opened the panel, though.
 
 ---
 
 ## What it does
 
-**Hide requests for good.** Right-click any row:
+### Hide requests for good
+
+Right-click any row:
 
 | Option | What it hides |
 |---|---|
 | This request only | Just that row, until you clear the log |
-| All with this path | Every request to that path, whatever the query string — so `/heartbeat?t=1` and `?t=2` both go |
+| All with this path | Every request to that path, whatever the query string — `/heartbeat?t=1` and `?t=2` both go |
 | All from this domain | Everything from that host |
 
-Tick **Apply on every site** before choosing, and the rule follows you everywhere
-(good for analytics). Otherwise it only applies to the site you made it on.
+Tick **Apply on every site** before choosing and the rule follows you everywhere, which is
+what you want for analytics. Otherwise it only applies to the site you made it on.
 
-**Hidden button** — top right, with a count. Opens a drawer listing every rule, split into
-*This site* and *Everywhere*, showing how many requests each one swallowed. Hover a rule
-to un-hide it.
+The **Hidden** button, top right, opens a drawer listing every rule — split into *This site*
+and *Everywhere*, with a count of how many requests each one swallowed. Un-hide from there.
 
-**Saved filters** — set up a filter (text + method/status/type), then hit **+** on the
-right of the filter bar and name it. It becomes a tab. Click to switch, ✕ to delete.
+### Find inside requests (⌘F)
 
-**Filter box** accepts plain text, `-word` to exclude, and `/regex/` for patterns. Combine
-them: `api -heartbeat /v[12]/`.
+The filter box only ever matched the URL. `⌘F` (`Ctrl F` on Windows and Linux) opens a
+finder that searches **URL, headers, payload and response body** — any mix of them.
 
-**Columns** — the Columns button, or right-click any column header. Six extras are
-available that aren't on by default: Path, Full URL, Initiator, Protocol, Started, Priority.
+- Scopes are multi-select. **All** is the default; picking another drops All, picking more
+  adds them, turning the last one off goes back to All.
+- Matching requests filter the table, the Type column is replaced by **Where it matched**,
+  and matched text is highlighted.
+- The optional **field** box narrows it further: field `status` with query `active` matches
+  only where a key named `status` holds that value — JSON keys at any depth, header names,
+  or URL query parameters.
+- Response bodies are the only part not already in memory, so they're fetched in batches
+  behind a progress bar you can stop. Results fill in as they're found.
 
-**Detail pane** — Headers, Payload and Response, with a Copy button on the last two.
-Drag its left edge to resize, or hit **Expand** for full width.
+A chip on the filter bar shows the active find; click it to edit, ✕ to clear.
+
+### Saved filters
+
+Set up a filter (text plus method, status and type), hit **+** on the right of the filter
+bar and name it. It becomes a tab — click to switch, double-click to rename, ✕ to delete.
+Edit an applied filter and a **Save** button appears to update it in place.
+
+### Filter box
+
+Plain text, `-word` to exclude, `/regex/` for patterns. Combine them:
+`api -heartbeat /v[12]/`. The finder takes the same syntax.
+
+### GraphQL
+
+GraphQL requests are detected by body shape, so batched, GET-style and persisted queries all
+work. The Payload tab shows the document and the variables as separate, separately copyable
+blocks — formatted with the real GraphQL parser, so what you paste into your IDE is valid.
+The operation name is available as a column.
+
+### The rest
+
+- **Columns** — the Columns button, or right-click any header. Six extras are off by
+  default: Path, Full URL, Initiator, Protocol, Started, Priority.
+- **Detail pane** — Headers, Payload and Response, each with a Copy button. Drag its left
+  edge to resize, or **Expand** for full width.
+- **Copy as cURL** and copy payload/response from the right-click menu.
+- Follows your DevTools theme, dark and light.
 
 ---
 
-## Publishing it to the Chrome Web Store
+## Contributing
 
-The extension is already store-ready: no remote code, no host permissions, `storage` is the
-only permission it asks for.
+Issues and pull requests are welcome — bug reports, a feature you miss from the Network tab,
+or a fix for something that annoys you.
 
-```bash
-./package.sh
-```
+There is nothing to set up. No build step, no npm, no bundler. Clone it, load `extension/`
+unpacked, edit a file, hit **Reload** on the extension card. What's in `extension/` is
+exactly what runs.
 
-That produces `network-tab-plus-<version>.zip`. Then:
+A few things worth knowing before you open a PR:
 
-1. Register as a Chrome Web Store developer — one-off $5 fee at
-   <https://chrome.google.com/webstore/devconsole>.
-2. **New item** → upload the zip.
-3. Fill in the listing. You'll need a 128×128 icon (in `extension/icons/`) and at least one
-   1280×800 screenshot of the panel in use.
-4. Under **Privacy practices**, declare the `storage` permission ("saves your hide rules and
-   filters on your own machine") and tick that you don't collect user data. Nothing leaves
-   the browser.
-5. Set visibility to **Unlisted** if it's just for you and your team — you get a link to
-   install from, and it auto-updates, without being publicly searchable.
+- **Keep it dependency-free.** The two vendored libraries in `extension/lib/` are loaded
+  from disk, never a CDN. Please don't add a build step or a package manager.
+- **Keep the permissions list at `storage`.** No host permissions, no remote code, nothing
+  leaves the browser. That's the whole privacy story (see [PRIVACY.md](PRIVACY.md)) and it
+  should stay true.
+- **Match the surrounding style.** Plain ES modules, short comments, no framework.
+- Say what you changed and how you checked it. There's no test suite, so a note on what you
+  clicked through is genuinely useful.
 
-Review usually takes a few days. Bump `version` in `extension/manifest.json` for each
-upload.
+Open an issue first if it's a big change, so you don't build something that doesn't fit.
 
 ---
 
@@ -88,13 +127,14 @@ extension/
   panel.html         markup
   panel.css          all styling, dark + light
   panel.js           capture, filtering, menus, wiring
+  find.js            the ⌘F finder
   store.js           hide rules, saved filters, prefs (chrome.storage.local)
-  request.js         HAR entry → table row, cURL export
+  request.js         HAR entry → table row, query matching, cURL export
   detail.js          the Headers/Payload/Response pane
   graphql.js         GraphQL detection, formatting and copy
-  lib/               Tabulator 6.3.1 + graphql-js 16.9.0, vendored — no CDN at runtime
+  lib/               Tabulator 6.3.1 + graphql-js 16.9.0, vendored
   icons/
-package.sh           builds the upload zip
+package.sh           builds a zip of extension/
 ```
 
-No build step and no npm. Plain HTML, CSS and ES modules — what's in `extension/` is what runs.
+Both bundled libraries are MIT licensed — see [THIRD-PARTY.md](THIRD-PARTY.md).
