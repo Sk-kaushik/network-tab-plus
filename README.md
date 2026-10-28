@@ -89,8 +89,8 @@ The operation name is available as a column.
 
 ### The rest
 
-- **Columns** — the Columns button, or right-click any header. Six extras are off by
-  default: Path, Full URL, Initiator, Protocol, Started, Priority.
+- **Columns** — the Columns button, or right-click any header. Seven extras are off by
+  default: GraphQL operation, Path, Full URL, Initiator, Protocol, Started, Priority.
 - **Detail pane** — Headers, Payload and Response, each with a Copy button. Drag its left
   edge to resize, or **Expand** for full width.
 - **Copy as cURL** and copy payload/response from the right-click menu.

@@ -37,11 +37,15 @@ export const store = {
     this.rules = data.rules || [];
     this.filters = data.filters || [];
     const saved = data.prefs || {};
-    this.prefs = {
-      ...DEFAULT_PREFS, ...saved,
-      rows: { ...DEFAULT_PREFS.rows, ...(saved.rows || {}) },
-      opts: { ...DEFAULT_PREFS.opts, ...(saved.opts || {}) },
-    };
+    // Only keys we still use. A pref removed in a later version would otherwise
+    // survive here and be written back, and the privacy policy promises the
+    // stored list is complete.
+    this.prefs = { ...DEFAULT_PREFS };
+    for (const key of Object.keys(DEFAULT_PREFS)) {
+      if (key in saved) this.prefs[key] = saved[key];
+    }
+    this.prefs.rows = { ...DEFAULT_PREFS.rows, ...(saved.rows || {}) };
+    this.prefs.opts = { ...DEFAULT_PREFS.opts, ...(saved.opts || {}) };
   },
 
   saveRules()   { return chrome.storage.local.set({ rules: this.rules }); },
