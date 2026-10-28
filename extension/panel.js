@@ -1,9 +1,11 @@
 // Network Tab+ panel: captures requests from DevTools, filters them, and keeps hide rules.
 
 import { store, ALL_COLUMNS, DEFAULT_COLUMNS, ruleApplies, ruleMatches } from "./store.js";
-import { normalize, esc, formatBytes, formatTime, statusKind, toCurl, getBody, prettyJson } from "./request.js";
+import { normalize, esc, formatBytes, formatTime, statusKind, toCurl, getBody, prettyJson,
+         parseQuery, queryIsEmpty, queryMatches, markTerms } from "./request.js";
 import { renderDetail, wireCopyButtons } from "./detail.js";
 import { isGraphQL, copyableQuery, copyableVariables } from "./graphql.js";
+import { find, SCOPES, findIsOn, chosenScopes, runFind, stopFind, clearFind } from "./find.js";
 
 const MAX_REQUESTS = 5000;   // oldest rows drop off beyond this, to keep memory sane
 const RENDER_DELAY = 100;    // ms to batch bursts of requests into one table update
@@ -51,6 +53,10 @@ const backfilledCounts = new Map();  // request key -> how many copies came from
 let captureGeneration = 0;           // bumped on clear, so a late backfill can bail
 
 const filterState = { query: "", methods: [], statuses: [], types: [] };
+let findTerms = [];                  // plain terms of the running find, for highlighting
+let findVisible = 0;                 // matches actually on screen, for the chip
+let lastColumnKey = "";              // what applyColumnVisibility last acted on
+let draftScopes = ["all"];           // the modal's scope buttons, until Find is pressed
 let activeViewId = null;
 
 let table = null;
@@ -58,7 +64,8 @@ let table = null;
 /* ------------------------------------------------------------------ table */
 
 const COLUMN_DEFS = {
-  name:      { title: "Name", field: "name", minWidth: 170, widthGrow: 3, formatter: (c) => esc(c.getValue()) },
+  name:      { title: "Name", field: "name", minWidth: 170, widthGrow: 3,
+               formatter: (c) => (findIsOn() ? markTerms(c.getValue(), findTerms) : esc(c.getValue())) },
   method:    { title: "Method", field: "method", width: 96, minWidth: 92,
                formatter: (c) => `<span class="m ${esc(c.getValue())}">${esc(c.getValue())}</span>` },
   status:    { title: "Status", field: "status", width: 92, minWidth: 86,
@@ -82,6 +89,12 @@ const COLUMN_DEFS = {
   priority:  { title: "Priority", field: "priority", width: 92, minWidth: 82, cssClass: "cell-mono", formatter: (c) => esc(c.getValue()) },
 };
 
+// Not in ALL_COLUMNS: it isn't a column you pick, it appears only while finding.
+const MATCH_COLUMN = {
+  title: "Where it matched", field: "matchedIn", width: 150, minWidth: 110, cssClass: "cell-match",
+  formatter: (c) => (c.getValue() ? `matched in <b>${esc(c.getValue())}</b>` : ""),
+};
+
 function clockTime(iso) {
   const date = new Date(iso);
   return isNaN(date) ? "" : date.toTimeString().slice(0, 8);
@@ -91,7 +104,7 @@ function buildTable() {
   table = new Tabulator($("table"), {
     data: [],
     index: "id",
-    columns: ALL_COLUMNS.map((col) => COLUMN_DEFS[col.key]),
+    columns: [...ALL_COLUMNS.map((col) => COLUMN_DEFS[col.key]), MATCH_COLUMN],
     layout: "fitColumns",
     height: "100%",
     rowHeight: 24,
@@ -124,11 +137,24 @@ function buildTable() {
 }
 
 function applyColumnVisibility() {
+  if (!tableReady) return;
+  const finding = findIsOn();
+
+  // Every search batch calls this, but the columns only move when a find starts
+  // or ends, or when you pick different ones.
+  const key = `${finding}|${store.prefs.columns.join(",")}`;
+  if (key === lastColumnKey) return;
+  lastColumnKey = key;
+
   for (const col of ALL_COLUMNS) {
-    const field = fieldOf(col.key);
-    if (store.prefs.columns.includes(col.key)) table.showColumn(field);
-    else table.hideColumn(field);
+    // "Where it matched" takes the Type column's place while a find is on.
+    const show = store.prefs.columns.includes(col.key) && !(finding && col.key === "type");
+    if (show) table.showColumn(fieldOf(col.key));
+    else table.hideColumn(fieldOf(col.key));
   }
+  if (finding) table.showColumn("matchedIn");
+  else table.hideColumn("matchedIn");
+  renderColumnLists();
 }
 
 function fieldOf(key) {
@@ -137,29 +163,8 @@ function fieldOf(key) {
 
 /* -------------------------------------------------------------- filtering */
 
-function parseQuery(text) {
-  const include = [], exclude = [], regexes = [];
-  for (const term of text.trim().split(/\s+/).filter(Boolean)) {
-    if (term.startsWith("-") && term.length > 1) {
-      exclude.push(term.slice(1).toLowerCase());
-    } else if (term.length > 2 && term.startsWith("/") && term.endsWith("/")) {
-      try { regexes.push(new RegExp(term.slice(1, -1), "i")); } catch { /* ignore bad regex while typing */ }
-    } else {
-      include.push(term.toLowerCase());
-    }
-  }
-  return { include, exclude, regexes };
-}
-
-function passesQuery(req, parsed) {
-  const url = req.url.toLowerCase();
-  if (parsed.exclude.some((term) => url.includes(term))) return false;
-  if (!parsed.include.every((term) => url.includes(term))) return false;
-  return parsed.regexes.every((re) => re.test(req.url));
-}
-
 function passesFilters(req, parsed) {
-  if (!passesQuery(req, parsed)) return false;
+  if (!queryMatches(req.url, parsed)) return false;
   if (filterState.methods.length && !filterState.methods.includes(req.method)) return false;
   if (filterState.statuses.length) {
     const bucket = req.status ? Math.floor(req.status / 100) + "xx" : "";
@@ -189,13 +194,21 @@ function scheduleRender() {
 function render() {
   if (!tableReady) return;
   const parsed = parseQuery(filterState.query);
+  const finding = findIsOn();
   const rows = [];
   let hidden = 0;
   let bytes = 0;
+  let beforeFind = 0;
 
   for (const req of requests) {
     if (isHidden(req)) { hidden++; continue; }
     if (!passesFilters(req, parsed)) continue;
+    beforeFind++;
+    if (finding) {
+      const where = find.matches.get(req.id);
+      if (!where) continue;
+      req.matchedIn = where;
+    }
     rows.push(req);
     bytes += req.sizeBytes;
   }
@@ -205,8 +218,12 @@ function render() {
     if (selectedId !== null) table.selectRow(selectedId);
   });
 
+  if (finding) findVisible = rows.length;
   $("statCount").textContent = rows.length;
-  $("statBytes").textContent = formatBytes(bytes);
+  $("statLabel").textContent = finding ? `of ${beforeFind} match “${find.query}”` : "requests";
+  $("statBytes").innerHTML = finding
+    ? "searched " + chosenScopes().join(", ")
+    : `<b>${formatBytes(bytes)}</b> transferred`;
 
   const ruleCount = store.rules.filter((r) => ruleApplies(r, site)).length;
   const statHidden = $("statHidden");
@@ -286,6 +303,7 @@ function clearAll() {
   backfilledCounts.clear();
   selectedId = null;
   closeDetail();
+  dropFind();
   render();
 }
 
@@ -550,6 +568,108 @@ function setQuery(text) {
   refreshViews();
 }
 
+/* ------------------------------------------------------------------ find */
+
+// All is stored as a value of its own, so clicking any other scope replaces it
+// and clicking it again puts everything back.
+function toggleScope(id) {
+  if (id === "all") { draftScopes = ["all"]; return; }
+  const picked = draftScopes.includes("all") ? [] : draftScopes.slice();
+  const at = picked.indexOf(id);
+  if (at === -1) picked.push(id);
+  else picked.splice(at, 1);
+  draftScopes = picked.length ? picked : ["all"];
+}
+
+function renderScopes() {
+  const on = (id) => (draftScopes.includes(id) ? " on" : "");
+  $("findScopes").innerHTML =
+    `<button class="sc${on("all")}" data-scope="all">All</button><div class="scsep"></div>` +
+    SCOPES.map((s) => `<button class="sc${on(s.id)}" data-scope="${s.id}">${s.label}</button>`).join("");
+  $("findHint").hidden = !chosenScopes(draftScopes).includes("response");
+  syncRunButton();
+}
+
+// The modal's inputs are a draft: nothing reaches find until Find is pressed.
+function syncRunButton() {
+  $("findRun").disabled = queryIsEmpty(parseQuery($("findQuery").value));
+}
+
+function openFind() {
+  closeMenus();
+  $("findQuery").value = find.query;
+  $("findField").value = find.field;
+  draftScopes = find.scopes.slice();
+  renderScopes();
+  showProgress(null);
+  $("findModal").classList.add("open");
+  $("findScrim").classList.add("open");
+  $("findQuery").focus();
+  $("findQuery").select();
+}
+
+function closeFindModal() {
+  if (find.running) stopFind();
+  $("findModal").classList.remove("open");
+  $("findScrim").classList.remove("open");
+  showProgress(null);
+}
+
+// null hides the progress row and puts the buttons back.
+function showProgress(state) {
+  $("findFoot").hidden = !!state;
+  $("findProg").hidden = !state;
+  if (!state) return;
+  const pct = state.total ? (state.done / state.total) * 100 : 100;
+  $("findFill").style.width = pct + "%";
+  $("findProgText").textContent = `${state.done} of ${state.total} · ${state.found} found`;
+}
+
+async function startFind() {
+  const query = $("findQuery").value.trim();
+  const parsed = parseQuery(query);
+  if (queryIsEmpty(parsed)) return;   // Enter gets here even with Find disabled
+
+  find.query = query;
+  find.field = $("findField").value.trim();
+  find.scopes = draftScopes.slice();
+  findTerms = parsed.include;
+
+  try {
+    const finished = await runFind(requests, (state) => {
+      if (state.total) showProgress(state);
+      afterFindChange();
+    });
+    if (finished) closeFindModal();
+  } finally {
+    // A clear or a navigation can end the run from the outside; without this
+    // the progress row would sit there with numbers that stopped moving.
+    showProgress(null);
+    afterFindChange();
+  }
+}
+
+function dropFind() {
+  clearFind();
+  findTerms = [];
+  afterFindChange();
+}
+
+function afterFindChange() {
+  applyColumnVisibility();
+  render();           // sets findVisible, which the chip reads
+  renderFindChip();
+}
+
+function renderFindChip() {
+  const chip = $("findChip");
+  chip.hidden = !findIsOn();
+  if (!findIsOn()) return;
+  $("findChipQuery").textContent = find.query;
+  const scopes = find.scopes.includes("all") ? "all" : chosenScopes().join("+");
+  $("findChipMeta").textContent = `· ${scopes} · ${findVisible}`;
+}
+
 /* ---------------------------------------------------------- saved views */
 
 // Current filter state, in the shape a saved filter stores.
@@ -683,11 +803,18 @@ function updateActiveView() {
 /* --------------------------------------------------------- column picker */
 
 function renderColumnLists() {
-  const html = ALL_COLUMNS.map((col) => `
-    <label class="col-row ${col.locked ? "lock" : ""}">
-      <input type="checkbox" data-col="${col.key}" ${store.prefs.columns.includes(col.key) ? "checked" : ""} ${col.locked ? "disabled" : ""} />
-      <span class="nm">${col.label}</span>${col.locked ? '<span class="hint">always on</span>' : ""}
-    </label>`).join("");
+  const finding = findIsOn();
+  const html = ALL_COLUMNS.map((col) => {
+    // Type is standing in for "Where it matched", so it can't be toggled now.
+    const busy = finding && col.key === "type";
+    const fixed = col.locked || busy;
+    const note = col.locked ? "always on" : busy ? "while finding" : "";
+    return `
+    <label class="col-row ${fixed ? "lock" : ""}">
+      <input type="checkbox" data-col="${col.key}" ${store.prefs.columns.includes(col.key) ? "checked" : ""} ${fixed ? "disabled" : ""} />
+      <span class="nm">${col.label}</span>${note ? `<span class="hint">${note}</span>` : ""}
+    </label>`;
+  }).join("");
   $("colList").innerHTML = html;
   $("headColList").innerHTML = html;
 }
@@ -697,7 +824,6 @@ function toggleColumn(key, show) {
   if (show) columns.push(key);
   store.setPref("columns", ALL_COLUMNS.filter((c) => columns.includes(c.key)).map((c) => c.key));
   applyColumnVisibility();
-  renderColumnLists();
 }
 
 /* ----------------------------------------------------------------- misc */
@@ -779,7 +905,6 @@ function wireToolbar() {
   $("colReset").addEventListener("click", () => {
     store.setPref("columns", DEFAULT_COLUMNS.slice());
     applyColumnVisibility();
-    renderColumnLists();
   });
 
   $("hiddenBtn").addEventListener("click", () => toggleDrawer(!$("drawer").classList.contains("open")));
@@ -893,6 +1018,67 @@ function wireMenus() {
   });
 }
 
+function wireFind() {
+  const isMac = navigator.userAgent.includes("Mac");
+  $("findKbd").textContent = isMac ? "\u2318F" : "Ctrl F";
+
+  $("findScopes").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-scope]");
+    if (!button) return;
+    toggleScope(button.dataset.scope);
+    renderScopes();
+  });
+
+  $("findQuery").addEventListener("input", syncRunButton);
+
+  for (const id of ["findQuery", "findField"]) {
+    $(id).addEventListener("keydown", (event) => {
+      if (event.key === "Enter") startFind();
+    });
+  }
+
+  $("findRun").addEventListener("click", startFind);
+  $("findStop").addEventListener("click", () => {
+    stopFind();
+    showProgress(null);
+    afterFindChange();
+    closeFindModal();
+  });
+
+  $("findClear").addEventListener("click", () => {
+    $("findQuery").value = "";
+    $("findField").value = "";
+    find.query = "";
+    find.field = "";
+    draftScopes = ["all"];
+    renderScopes();
+    dropFind();
+    $("findQuery").focus();
+  });
+
+  // No close on the scrim: a stray click outside shouldn't throw away a query
+  // you are halfway through typing. Cancel, ✕ and Escape close it.
+  $("findCancel").addEventListener("click", closeFindModal);
+  $("findClose").addEventListener("click", closeFindModal);
+
+  $("findChip").addEventListener("click", (event) => {
+    if (event.target.closest("#findChipClear")) { dropFind(); return; }
+    openFind();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const findKey = isMac ? event.metaKey : event.ctrlKey;
+    if (findKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      // Pressing it again while the modal is up must not discard a half-typed query.
+      if ($("findModal").classList.contains("open")) $("findQuery").select();
+      else openFind();
+      return;
+    }
+    if (event.key === "Escape" && $("findModal").classList.contains("open")) closeFindModal();
+  });
+}
+
 /* ------------------------------------------------------------------- init */
 
 async function init() {
@@ -910,6 +1096,7 @@ async function init() {
   wireToolbar();
   wireDetail();
   wireMenus();
+  wireFind();
 
   readSite();
   startCapture();

@@ -378,3 +378,86 @@ pre { margin: 0; font: 10.5px/1.65 var(--mono); white-space: pre-wrap; overflow-
   opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------------- find (⌘F) ---------------- */
+.fchip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 22px; padding: 0 4px 0 8px; max-width: 320px;
+  border: 1px solid color-mix(in srgb, var(--blue) 55%, transparent);
+  border-radius: 5px; background: var(--blue-bg);
+  color: var(--blue); font: 11px var(--ui); cursor: pointer; white-space: nowrap;
+}
+.fchip[hidden] { display: none; }
+.fchip svg { width: 12px; height: 12px; flex: none; }
+.fchip .q { font: 10.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.fchip .n { color: color-mix(in srgb, var(--blue) 72%, var(--t)); font-size: 10px; flex: none; }
+.fchip .x {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 15px; height: 15px; border-radius: 3px; font-size: 10px;
+  background: color-mix(in srgb, var(--blue) 20%, transparent);
+}
+.fchip .x:hover { background: color-mix(in srgb, var(--blue) 38%, transparent); }
+
+.fscrim {
+  position: absolute; inset: 0; z-index: 68; background: rgba(0,0,0,.42);
+  opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.fscrim.open { opacity: 1; pointer-events: auto; }
+
+.fmodal {
+  position: absolute; left: 50%; top: 26px; transform: translateX(-50%);
+  z-index: 70; width: min(470px, calc(100% - 24px)); display: none;
+  background: var(--pop); border: 1px solid var(--line2); border-radius: 10px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.55); overflow: hidden;
+}
+.fmodal.open { display: block; }
+
+.fm-h { display: flex; align-items: center; gap: 8px; padding: 8px 9px 8px 11px; border-bottom: 1px solid var(--line); }
+.fm-h svg { width: 13px; height: 13px; color: var(--blue); }
+.fm-h h3 { margin: 0; font: 600 12px var(--ui); }
+.kbd {
+  font: 10px var(--mono); color: var(--td); padding: 0 4px;
+  background: var(--sunk); border: 1px solid var(--line2); border-bottom-width: 2px; border-radius: 4px;
+}
+
+.fm-b { padding: 11px; }
+.fm-l { display: block; margin-bottom: 5px; color: var(--tf); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.fm-l em { font-style: normal; text-transform: none; letter-spacing: 0; }
+
+.scopes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 11px; }
+.sc {
+  display: inline-flex; align-items: center; height: 25px; padding: 0 13px;
+  border: 1px solid var(--line2); border-radius: 13px; background: var(--sunk);
+  color: var(--td); font: 11px var(--ui); cursor: pointer;
+}
+.sc:hover { color: var(--t); border-color: var(--tf); }
+.sc.on {
+  border-color: color-mix(in srgb, var(--blue) 65%, transparent);
+  background: var(--blue-bg); color: var(--blue); font-weight: 600;
+}
+.scsep { width: 1px; height: 16px; background: var(--line2); margin: 0 3px; flex: none; }
+
+.fmodal .find { height: 30px; flex: none; padding: 0 10px; border-radius: 6px; margin-bottom: 9px; }
+.fmodal .find input { font-size: 12px; }
+.fm-hint { margin-top: -3px; color: var(--tf); font-size: 10px; }
+.fm-hint b { color: var(--td); font-weight: 500; }
+
+.fm-f, .fm-p { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-top: 1px solid var(--line); background: var(--sunk); }
+.fm-f[hidden], .fm-p[hidden] { display: none; }
+.fm-f .btn, .fm-p .btn { height: 26px; padding: 0 11px; }
+.btn.pri { padding: 0 13px; border-color: transparent; background: var(--blue); color: var(--bg); font-weight: 600; }
+.btn.pri:hover { border-color: transparent; filter: brightness(1.08); }
+.btn.pri:disabled { opacity: .45; cursor: default; filter: none; }
+
+.fm-p .track { flex: 1; height: 4px; border-radius: 2px; background: var(--line2); overflow: hidden; }
+.fm-p .fill { height: 100%; width: 0; background: var(--blue); border-radius: 2px; transition: width .12s linear; }
+.fm-p span { color: var(--td); font-size: 10.5px; white-space: nowrap; }
+.spin {
+  width: 12px; height: 12px; flex: none; border: 2px solid var(--line2);
+  border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.tabulator mark { background: color-mix(in srgb, var(--amber) 38%, transparent); color: var(--t); border-radius: 2px; padding: 0 1px; }
+.cell-match { color: var(--tf); }
+.cell-match b { color: var(--amber); font-weight: 600; }
