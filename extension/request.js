@@ -182,7 +182,7 @@ const SKIP_HEADERS = ["content-length", "host", "connection"];
 
 export function toCurl(req) {
   const parts = [`curl '${shellQuote(req.url)}'`];
-  if (req.method !== "GET") parts.push(`-X ${req.method}`);
+  if (req.method !== "GET") parts.push(`-X '${shellQuote(req.method)}'`);
 
   for (const header of req.entry.request.headers || []) {
     const name = header.name.toLowerCase();

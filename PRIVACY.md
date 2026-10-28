@@ -1,6 +1,6 @@
 # Privacy Policy — Network Tab+
 
-**Last updated: 15 October 2026**
+**Last updated: 28 October 2026**
 
 ## Summary
 

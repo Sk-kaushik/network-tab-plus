@@ -23,7 +23,6 @@ const DEFAULT_PREFS = {
   preserveLog: false,
   columns: DEFAULT_COLUMNS.slice(),
   paneWidth: 400,
-  expanded: false,
   rows: { method: false, status: false, type: true },  // which filter rows are on show
   opts: { hideData: false, thirdParty: false },
 };

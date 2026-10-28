@@ -340,7 +340,6 @@ function setExpanded(expanded) {
   $("detail").style.flexBasis = expanded ? "100%" : store.prefs.paneWidth + "px";
   $("expLabel").textContent = expanded ? "Collapse" : "Expand";
   $("expIcon").innerHTML = expanded ? COLLAPSE_ICON : EXPAND_ICON;
-  store.setPref("expanded", expanded);
   if (tableReady) table.redraw(true);
 }
 

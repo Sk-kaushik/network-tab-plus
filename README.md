@@ -13,8 +13,7 @@ Works in Brave, Chrome, Edge and any other Chromium browser.
 
 ## Install
 
-There is no store listing yet, so load it from source. It takes a minute and survives
-browser restarts.
+Load it from source. It takes a minute and survives browser restarts.
 
 1. Clone or download this repo.
 2. Open `brave://extensions` (or `chrome://extensions`).
@@ -75,6 +74,11 @@ Edit an applied filter and a **Save** button appears to update it in place.
 
 Plain text, `-word` to exclude, `/regex/` for patterns. Combine them:
 `api -heartbeat /v[12]/`. The finder takes the same syntax.
+
+One thing to know about `-word` in the finder: it is checked against the places the search
+actually looked at. A request that matches on its URL is never read any further, so an
+excluded word sitting in its response body won't rule it out. Searching Response on its own
+applies the exclusion to the body.
 
 ### GraphQL
 
