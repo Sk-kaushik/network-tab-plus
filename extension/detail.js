@@ -6,7 +6,11 @@ import { readGraphQL, formatQuery } from "./graphql.js";
 const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.2A1.7 1.7 0 0 0 8.9 2H4a2 2 0 0 0-2 2v4.9c0 .8.5 1.4 1.2 1.6"/></svg>';
 const TICK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.4 6.2 11.6 13 4.8"/></svg>';
 
+// Bumped on every render, so a response body that arrives late knows it is stale.
+let renderToken = 0;
+
 export function renderDetail(el, req, tab) {
+  renderToken++;
   if (!req) {
     el.innerHTML = emptyState("Select a request to inspect it");
     return;
@@ -70,7 +74,9 @@ function graphqlView(operations) {
 
 function renderResponse(el, req) {
   el.innerHTML = `<div class="empty">Loading response…</div>`;
+  const token = renderToken;
   getBody(req).then((body) => {
+    if (token !== renderToken) return;   // another request or tab took over
     if (!body) {
       el.innerHTML = emptyState("This request has no response body");
       return;
