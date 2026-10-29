@@ -49,7 +49,7 @@ let hiddenNow = 0;
 let menuRequest = null;              // request the context menu was opened on
 let tableReady = false;              // Tabulator builds asynchronously; nothing may touch it before this
 const sessionHidden = new Set();     // "this request only" hides, forgotten on clear
-const backfilledIds = new Map();     // request key -> ids of rows still waiting to finish
+const backfilledCounts = new Map();  // request key -> how many copies came from getHAR
 let captureGeneration = 0;           // bumped on clear, so a late backfill can bail
 
 const filterState = { query: "", methods: [], statuses: [], types: [] };
@@ -237,7 +237,7 @@ function render() {
 function startCapture() {
   chrome.devtools.network.onRequestFinished.addListener((entry) => {
     if (paused) return;
-    if (settleBackfilled(entryKey(entry), entry)) { scheduleRender(); return; }
+    if (consumeBackfilled(entryKey(entry))) return;
     requests.push(normalize(entry, nextId++));
     if (requests.length > MAX_REQUESTS) requests.shift();
     scheduleRender();
@@ -271,17 +271,20 @@ function backfill() {
 
     const earlier = [];
     for (const entry of har?.entries || []) {
+      // getHAR also hands back requests that are still running. They have no
+      // status yet and they arrive complete on their own, so a row now would
+      // only ever sit there blank.
+      if (!entry.response?.status) continue;
+
       const key = entryKey(entry);
       const alreadyLive = live.get(key);
       if (alreadyLive) {
         live.set(key, alreadyLive - 1);
         continue;
       }
-      // Either it finished during the getHAR round trip, or it is still in
-      // flight. Both arrive live later, and both land on this same row.
-      const id = nextId++;
-      backfilledIds.set(key, [...(backfilledIds.get(key) || []), id]);
-      earlier.push(normalize(entry, id));
+      // May still arrive live if it finished during the getHAR round trip.
+      backfilledCounts.set(key, (backfilledCounts.get(key) || 0) + 1);
+      earlier.push(normalize(entry, nextId++));
     }
     if (!earlier.length) return;
 
@@ -290,19 +293,11 @@ function backfill() {
   });
 }
 
-// A request still in flight when the panel opened comes back from getHAR with
-// no status and no size. Fill that same row in when it finishes, instead of
-// dropping the finished copy and leaving the row blank for good.
-function settleBackfilled(key, entry) {
-  const ids = backfilledIds.get(key);
-  if (!ids?.length) return false;
-
-  const id = ids.shift();
-  if (!ids.length) backfilledIds.delete(key);
-
-  const at = requests.findIndex((req) => req.id === id);
-  if (at === -1) return false;   // row already aged out, so let it be added again
-  requests[at] = normalize(entry, id);
+// One live arrival cancels one backfilled copy of the same request.
+function consumeBackfilled(key) {
+  const pending = backfilledCounts.get(key);
+  if (!pending) return false;
+  backfilledCounts.set(key, pending - 1);
   return true;
 }
 
@@ -310,7 +305,7 @@ function clearAll() {
   captureGeneration++;
   requests = [];
   sessionHidden.clear();
-  backfilledIds.clear();
+  backfilledCounts.clear();
   selectedId = null;
   closeDetail();
   dropFind();
@@ -437,7 +432,10 @@ function runMenuAction(action) {
       break;
     }
     case "copy-response":
-      getBody(req).then((body) => copyText(body ? prettyJson(body) : ""));
+      getBody(req).then((body) => {
+        if (body === null) { toast("DevTools didn't return this body"); return; }
+        copyText(body ? prettyJson(body) : "");
+      });
       break;
     case "copy-query":
       copyText(copyableQuery(req));

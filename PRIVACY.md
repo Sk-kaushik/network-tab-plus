@@ -1,6 +1,6 @@
 # Privacy Policy — Network Tab+
 
-**Last updated: 28 October 2026**
+**Last updated: 29 October 2026**
 
 ## Summary
 
@@ -56,7 +56,7 @@ the settings listed above between sessions.
 Everything is stored locally and under your control:
 
 - Remove individual hide rules or saved filters from within the panel
-- Use "Un-hide all" to clear every hide rule at once
+- Use "Un-hide all" to clear the rules shown for the site you are on, plus the ones you set to apply everywhere
 - Uninstalling the extension removes all stored settings from your browser
 
 ## Children

@@ -202,27 +202,35 @@ function shellQuote(value) {
 }
 
 // Reads the response body. DevTools hands it over asynchronously, so we cache it.
-// DevTools never calls back for some bodies — a no-store response the page
-// itself never read is one. The finder asks for 25 at a time, so a single one
-// of those used to stall the whole search.
+//
+// Some bodies never arrive at all — a no-store response the page itself never
+// read is one. The finder asks for 25 at a time, so one of those used to stall
+// the whole search.
 const BODY_WAIT = 5000;
 
 export function getBody(req) {
-  // Only a non-empty body is cached. DevTools can return nothing on the first
-  // ask and the content a moment later, and caching "" made that permanent.
+  // Three states: a body we have, null for one DevTools never gave us, and
+  // nothing yet. "" is deliberately not cached — DevTools can answer empty on
+  // the first ask and give the content a moment later.
   if (req._body) return Promise.resolve(req._body);
+  if (req._body === null) return Promise.resolve(null);
+
   return new Promise((resolve) => {
-    const giveUp = setTimeout(() => resolve(""), BODY_WAIT);
+    const giveUp = setTimeout(() => {
+      req._body = null;
+      resolve(null);
+    }, BODY_WAIT);
+
     try {
       req.entry.getContent((content) => {
         clearTimeout(giveUp);
-        // Still cached if it turns up late, so a later look gets it for free.
+        // Still kept if it turns up after we gave up, so a later look is free.
         req._body = content || "";
         resolve(req._body);
       });
     } catch {
       clearTimeout(giveUp);
-      resolve("");
+      resolve(null);
     }
   });
 }

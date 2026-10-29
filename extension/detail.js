@@ -77,6 +77,10 @@ function renderResponse(el, req) {
   const token = renderToken;
   getBody(req).then((body) => {
     if (token !== renderToken) return;   // another request or tab took over
+    if (body === null) {
+      el.innerHTML = emptyState("DevTools didn't return this body — reopen the tab to try again");
+      return;
+    }
     if (!body) {
       el.innerHTML = emptyState("This request has no response body");
       return;
