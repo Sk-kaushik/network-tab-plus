@@ -68,8 +68,11 @@ export const store = {
     this.saveRules();
   },
 
-  clearRules() {
-    this.rules = [];
+  // Only the rules in force here — the ones the drawer actually lists. Wiping
+  // every site's rules from a button labelled "Un-hide all" threw away work
+  // you could not see.
+  clearRulesFor(site) {
+    this.rules = this.rules.filter((rule) => !ruleApplies(rule, site));
     this.saveRules();
   },
 
