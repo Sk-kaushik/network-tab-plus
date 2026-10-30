@@ -6,9 +6,12 @@ import { normalize, esc, formatBytes, formatTime, statusKind, toCurl, getBody, p
 import { renderDetail, wireCopyButtons } from "./detail.js";
 import { isGraphQL, copyableQuery, copyableVariables } from "./graphql.js";
 import { find, SCOPES, findIsOn, chosenScopes, runFind, stopFind, clearFind } from "./find.js";
+import { pollStreams, clearStreams } from "./stream.js";
 
 const MAX_REQUESTS = 5000;   // oldest rows drop off beyond this, to keep memory sane
 const RENDER_DELAY = 100;    // ms to batch bursts of requests into one table update
+const HAR_SWEEP = 2000;      // ms between getHAR re-reads, for requests that never finish
+const STREAM_POLL = 800;     // ms between pulls of captured stream messages
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const STATUSES = ["2xx", "3xx", "4xx", "5xx"];
@@ -248,44 +251,75 @@ function startCapture() {
     if (!store.prefs.preserveLog) clearAll();
   });
 
-  backfill();
+  syncFromHar();
+  setInterval(syncFromHar, HAR_SWEEP);
+
+  // devtools.js installs the page-side capture; here we just watch it grow.
+  setInterval(() => pollStreams(onStreamData), STREAM_POLL);
+}
+
+// A stream the pane is open on keeps growing, so redraw it as messages land.
+function onStreamData() {
+  if (selectedId !== null && detailTab === "response") renderCurrentDetail();
 }
 
 // DevTools records requests from the moment it opens, but this panel only starts
 // hearing about them once it is first shown. getHAR gives us everything we missed,
 // so the table isn't empty when you open the tab on an already-loaded page.
-function backfill() {
+// Some requests never finish. A server-sent event stream stays open for as long
+// as the page wants it, so onRequestFinished never fires and the row would never
+// appear. getHAR is the only place they show up, so we re-read it on a timer:
+// new requests get added, and ones still receiving data get refreshed.
+function syncFromHar() {
+  if (paused) return;
   const generation = captureGeneration;
+
   chrome.devtools.network.getHAR((har) => {
     // A clear or navigation while getHAR was in flight means these are stale.
     if (generation !== captureGeneration) return;
 
-    // Requests already captured live cancel out their copy in the HAR. Counted
-    // rather than a Set, because requests fired in one tick share a millisecond
-    // and so share a key.
-    const live = new Map();
+    // Rows we already have, keyed the same way. A list per key because requests
+    // fired in one tick share a millisecond, and so share a key.
+    const have = new Map();
     for (const req of requests) {
       const key = entryKey(req.entry);
-      live.set(key, (live.get(key) || 0) + 1);
+      if (!have.has(key)) have.set(key, []);
+      have.get(key).push(req);
     }
 
-    const earlier = [];
+    const added = [];
+    let refreshed = false;
+
     for (const entry of har?.entries || []) {
+      // No status yet means the response hasn't started. Nothing to show, and
+      // the url can still change, so wait for a later sweep.
+      if (!entry.response?.status) continue;
+
       const key = entryKey(entry);
-      const alreadyLive = live.get(key);
-      if (alreadyLive) {
-        live.set(key, alreadyLive - 1);
+      const mine = have.get(key);
+
+      if (mine?.length) {
+        const req = mine.shift();
+        if (entrySignature(entry) !== entrySignature(req.entry)) {
+          Object.assign(req, normalize(entry, req.id));   // still growing, or just finished
+          refreshed = true;
+        }
         continue;
       }
+
       // May still arrive live if it finished during the getHAR round trip.
       backfilledCounts.set(key, (backfilledCounts.get(key) || 0) + 1);
-      earlier.push(normalize(entry, nextId++));
+      added.push(normalize(entry, nextId++));
     }
-    if (!earlier.length) return;
 
-    requests = earlier.concat(requests).slice(-MAX_REQUESTS);
-    render();
+    if (added.length) requests = added.concat(requests).slice(-MAX_REQUESTS);
+    if (added.length || refreshed) render();
   });
+}
+
+// Changes while a request is open: bytes so far, and the duration once it ends.
+function entrySignature(entry) {
+  return `${entry.response?.status} ${entry.response?.content?.size} ${entry.time}`;
 }
 
 // One live arrival cancels one backfilled copy of the same request.
@@ -304,6 +338,7 @@ function clearAll() {
   selectedId = null;
   closeDetail();
   dropFind();
+  clearStreams();
   render();
 }
 
@@ -427,7 +462,10 @@ function runMenuAction(action) {
       break;
     }
     case "copy-response":
-      getBody(req).then((body) => copyText(body ? prettyJson(body) : ""));
+      getBody(req).then((body) => {
+        if (body === null) { toast("DevTools didn't return this body"); return; }
+        copyText(body ? prettyJson(body) : "");
+      });
       break;
     case "copy-query":
       copyText(copyableQuery(req));
@@ -911,7 +949,7 @@ function wireToolbar() {
   $("scrim").addEventListener("click", () => toggleDrawer(false));
   $("statHidden").addEventListener("click", () => toggleDrawer(true));
   $("unhideAll").addEventListener("click", () => {
-    store.clearRules();
+    store.clearRulesFor(site);
     sessionHidden.clear();
     render();
     renderRules();
