@@ -2,6 +2,7 @@
 
 import { esc, statusKind, formatTime, getBody, prettyJson, highlightJson, highlightGraphQL } from "./request.js";
 import { readGraphQL, formatQuery } from "./graphql.js";
+import { hasStream, readStream } from "./stream.js";
 
 const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.2A1.7 1.7 0 0 0 8.9 2H4a2 2 0 0 0-2 2v4.9c0 .8.5 1.4 1.2 1.6"/></svg>';
 const TICK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.4 6.2 11.6 13 4.8"/></svg>';
@@ -73,6 +74,19 @@ function graphqlView(operations) {
 }
 
 function renderResponse(el, req) {
+  // A stream's messages come from the page, not from DevTools, and they are
+  // there while it is still running — so prefer them over asking for a body.
+  if (hasStream(req)) {
+    const mine = renderToken;
+    readStream(req, (text) => {
+      if (mine !== renderToken) return;
+      el.innerHTML = text
+        ? copyableSection("Response", text)
+        : emptyState("Streaming — no messages yet");
+    });
+    return;
+  }
+
   el.innerHTML = `<div class="empty">Loading response…</div>`;
   const token = renderToken;
   getBody(req).then((body) => {

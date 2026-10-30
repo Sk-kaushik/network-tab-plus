@@ -87,6 +87,26 @@ work. The Payload tab shows the document and the variables as separate, separate
 blocks — formatted with the real GraphQL parser, so what you paste into your IDE is valid.
 The operation name is available as a column.
 
+### Streaming responses
+
+A server-sent event stream never "finishes", so DevTools never hands it over —
+`getContent` simply never answers, and the HAR entry carries only a byte count.
+The panel reads the messages from the page instead, and shows them in the
+Response tab as they arrive.
+
+To do that it wraps `fetch` and `EventSource` in the page you are inspecting.
+That is the one place this extension is not a passive observer, and it has
+limits worth knowing:
+
+- Only streams the page starts **after** DevTools opened are captured. One
+  already running, or started during the page's own load, is missed.
+- Streams opened inside a web worker or a service worker are not seen.
+- A page that grabbed `fetch` into a variable before the panel arrived keeps
+  using the original, so its streams are missed too.
+
+When nothing is captured you still get the row, with a size that climbs while
+data arrives, and the full body once the stream closes.
+
 ### The rest
 
 - **Columns** — the Columns button, or right-click any header. Seven extras are off by
@@ -113,7 +133,8 @@ A few things worth knowing before you open a PR:
   from disk, never a CDN. Please don't add a build step or a package manager.
 - **Keep the permissions list at `storage`.** No host permissions, no remote code, nothing
   leaves the browser. That's the whole privacy story (see [PRIVACY.md](PRIVACY.md)) and it
-  should stay true.
+  should stay true. The one page-side exception is the stream capture above — if you extend
+  it, say so in the README and in the privacy policy.
 - **Match the surrounding style.** Plain ES modules, short comments, no framework.
 - Say what you changed and how you checked it. There's no test suite, so a note on what you
   clicked through is genuinely useful.

@@ -6,10 +6,12 @@ import { normalize, esc, formatBytes, formatTime, statusKind, toCurl, getBody, p
 import { renderDetail, wireCopyButtons } from "./detail.js";
 import { isGraphQL, copyableQuery, copyableVariables } from "./graphql.js";
 import { find, SCOPES, findIsOn, chosenScopes, runFind, stopFind, clearFind } from "./find.js";
+import { pollStreams, clearStreams } from "./stream.js";
 
 const MAX_REQUESTS = 5000;   // oldest rows drop off beyond this, to keep memory sane
 const RENDER_DELAY = 100;    // ms to batch bursts of requests into one table update
 const HAR_SWEEP = 2000;      // ms between getHAR re-reads, for requests that never finish
+const STREAM_POLL = 800;     // ms between pulls of captured stream messages
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const STATUSES = ["2xx", "3xx", "4xx", "5xx"];
@@ -251,6 +253,14 @@ function startCapture() {
 
   syncFromHar();
   setInterval(syncFromHar, HAR_SWEEP);
+
+  // devtools.js installs the page-side capture; here we just watch it grow.
+  setInterval(() => pollStreams(onStreamData), STREAM_POLL);
+}
+
+// A stream the pane is open on keeps growing, so redraw it as messages land.
+function onStreamData() {
+  if (selectedId !== null && detailTab === "response") renderCurrentDetail();
 }
 
 // DevTools records requests from the moment it opens, but this panel only starts
@@ -328,6 +338,7 @@ function clearAll() {
   selectedId = null;
   closeDetail();
   dropFind();
+  clearStreams();
   render();
 }
 

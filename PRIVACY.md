@@ -1,6 +1,6 @@
 # Privacy Policy — Network Tab+
 
-**Last updated: 29 October 2026**
+**Last updated: 30 October 2026**
 
 ## Summary
 
@@ -34,6 +34,19 @@ That is the complete list.
 Network requests shown in the panel are read from the Chrome DevTools API while DevTools
 is open, displayed to you, and discarded when you clear the log or close DevTools. They
 are never written to storage.
+
+## Streaming responses
+
+Chrome's DevTools API does not hand over the contents of a response that is still
+streaming. So that you can read them, Network Tab+ adds a wrapper around the page's own
+`fetch` and `EventSource` while DevTools is open, and keeps a copy of the messages the
+page receives.
+
+- This only happens on the page you are inspecting, and only while DevTools is open.
+- The messages are held in memory, shown to you, and discarded when you clear the log or
+  close DevTools. They are never written to storage and never leave your browser.
+- The wrapper does not change, block or redirect any request. The page receives exactly
+  what it would have received otherwise.
 
 ## Data transmission
 
